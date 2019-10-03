@@ -8,18 +8,17 @@ import revtorch as rv
 class ReVAE(nn.Module):
     def __init__(self):
         super(ReVAE, self).__init__()
-
-        self.fc1 = nn.Linear(784, 400)
-        self.fc21 = nn.Linear(400, 20)
-        self.fc22 = nn.Linear(400, 20)
-        self.fc3 = nn.Linear(20, 400)
-        self.fc4 = nn.Linear(400, 784)
+        self.fc1 = nn.Linear(3072, 400)
+        self.fc21 = nn.Linear(400, 30)
+        self.fc22 = nn.Linear(400, 30)
+        self.fc3 = nn.Linear(30, 400)
+        self.fc4 = nn.Linear(400, 3072)
 
         # f and g must both be a nn.Module whos output has the same shape as its input
         f_func = nn.Sequential(nn.ReLU(), nn.Linear(200, 200))
         g_func = nn.Sequential(nn.ReLU(), nn.Linear(200, 200))
 
-        blocks = [rv.ReversibleBlock(f_func, g_func) for i in range(1)]
+        blocks = [rv.ReversibleBlock(f_func, g_func) for i in range(2)]
 
         # pack all reversible blocks into a reversible sequence
         self.sequence = rv.ReversibleSequence(nn.ModuleList(blocks))
@@ -41,14 +40,14 @@ class ReVAE(nn.Module):
         return torch.sigmoid(self.fc4(h3))
 
     def forward(self, x):
-        mu, logvar = self.encode(x.view(-1, 784))
+        mu, logvar = self.encode(x.view(-1, 3*1024))
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
-    BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
+    BCE = F.binary_cross_entropy(recon_x, x.view(-1, 3072), reduction='sum')
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
