@@ -6,43 +6,71 @@ import revtorch as rv
 
 
 class ReVAE(nn.Module):
-    def __init__(self):
+    def __init__(self, in_channels=1, out_channels=1, n_layers_enc=4, n_layers_dec=1, latent_dim=10):
         super(ReVAE, self).__init__()
-        self.fc1 = nn.Linear(3072, 400)
-        self.fc21 = nn.Linear(400, 30)
-        self.fc22 = nn.Linear(400, 30)
-        self.fc3 = nn.Linear(30, 400)
-        self.fc4 = nn.Linear(400, 3072)
+
+        # Encoder
+        self.fc21 = nn.Linear(1024, 10)
+        self.fc22 = nn.Linear(1024, 10)
+
+        self.conv1 = nn.Conv2d(3, 32, 3) # go to 32 channels such that reversible blocks can split it.
 
         # f and g must both be a nn.Module whos output has the same shape as its input
-        f_func = nn.Sequential(nn.ReLU(), nn.Linear(200, 200))
-        g_func = nn.Sequential(nn.ReLU(), nn.Linear(200, 200))
+        f_func_enc = nn.Sequential(nn.Conv2d(16, 16, 3, padding=1), nn.ReLU(), nn.Conv2d(16, 16, 3, padding=1))
+        g_func_enc = nn.Sequential(nn.Conv2d(16, 16, 3, padding=1), nn.ReLU(), nn.Conv2d(16, 16, 3, padding=1))
 
-        blocks = [rv.ReversibleBlock(f_func, g_func) for i in range(2)]
+        blocks_enc = [rv.ReversibleBlock(f_func_enc, g_func_enc) for i in range(n_layers_enc)]
+
+        self.conv2mu = nn.Conv2d(32, 10, 3)
+        self.conv2logvar = nn.Conv2d(32, 10, 3)
+
+        self.sequence_enc = rv.ReversibleSequence(nn.ModuleList(blocks_enc))
+
+        # Decoder
+        self.lin = nn.Linear(10, 7*7*32)
+        self.conv3 = nn.ConvTranspose2d(32, 32, kernel_size=3, stride=(2, 2))
+        self.conv4 = nn.ConvTranspose2d(32, 32, kernel_size=3, stride=(2, 2), output_padding=1)
+
+        f_func_dec = nn.Sequential(nn.Conv2d(16, 16, 3, padding=1), nn.ReLU(), nn.Conv2d(16, 16, 3, padding=1))
+        g_func_dec = nn.Sequential(nn.Conv2d(16, 16, 3, padding=1), nn.ReLU(), nn.Conv2d(16, 16, 3, padding=1))
+
+        blocks_dec = [rv.ReversibleBlock(f_func_enc, g_func_enc) for i in range(n_layers_dec)]
 
         # pack all reversible blocks into a reversible sequence
-        self.sequence = rv.ReversibleSequence(nn.ModuleList(blocks))
+        self.sequence_dec = rv.ReversibleSequence(nn.ModuleList(blocks_dec))
+
+        self.last = nn.Conv2d(32, 3, 3, padding=1)
 
     def encode(self, x):
-        h1 = F.relu(self.fc1(x))
-        h1 = self.sequence(h1)
-        return self.fc21(h1), self.fc22(h1)
+        h1 = self.conv1(x)
+        before_size = h1.size()
+        h1 = self.sequence_enc(h1)
+        after_size = h1.size()
+        assert before_size == after_size
 
-    # key part of VAE
+        mu_ = self.conv2mu(h1)
+        logvar_ = self.conv2logvar(h1)
+        mu_ = F.avg_pool2d(mu_, (mu_.shape[2], mu_.shape[3]))
+        logvar_ = F.avg_pool2d(logvar_, (logvar_.shape[2], logvar_.shape[3]))
+        return mu_.view(mu_.shape[0], mu_.shape[1]), logvar_.view(logvar_.shape[0], logvar_.shape[1])
+
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode(self, z):
-        h3 = F.relu(self.fc3(z))
-        h3 = self.sequence(h3)
-        return torch.sigmoid(self.fc4(h3))
+        h3 = F.relu(self.lin(z))
+        h3 = h3.view(128, 32, 7, 7)
+        h3 = F.relu(self.conv3(h3))
+        h3 = F.relu(self.conv4(h3))
+        h3 = self.sequence_dec(h3)
+        return torch.sigmoid(self.last(h3))
 
     def forward(self, x):
-        mu, logvar = self.encode(x.view(-1, 3*1024))
+        mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
-        return self.decode(z), mu, logvar
+        return self.decode(z).view(-1, 3072), mu, logvar
 
 
 # Reconstruction + KL divergence losses summed over all elements and batch
