@@ -46,20 +46,20 @@ class ReVAE(nn.Module):
 
     def _encode(self, x):
         h1 = F.relu(self.fc1(x))
-        return self.fc21(h1), self.fc22(h1)
+        return F.relu(self.fc21(h1)), F.relu(self.fc22(h1))
 
     def encode(self, x):
-        h1 = self.conv1(x)
+        h1 = F.relu(self.conv1(x))
 
         before_size = h1.size()
         h1 = self.sequence_enc(h1)
         after_size = h1.size()
 
         assert before_size == after_size, 'Size {} is not equal to {}'.format(before_size, after_size)
-        h1 = self.conv2(h1)
+        h1 = F.relu(self.conv2(h1))
 
         h1 = h1.view(-1, 2700)
-        return self.fc21(h1), self.fc22(h1)
+        return F.relu(self.fc21(h1)), F.relu(self.fc22(h1))
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)

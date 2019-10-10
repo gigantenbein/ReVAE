@@ -1,4 +1,4 @@
-
+import logging
 import argparse
 import torch
 import torch.utils.data
@@ -7,6 +7,7 @@ from torch.nn import functional as F
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
 import pytest
+from guppy import hpy
 
 from model import ReVAE, loss_function
 
@@ -35,7 +36,8 @@ def train(epoch):
     model.train()
     train_loss = 0
     for batch_idx, (data, _) in enumerate(train_loader):
-
+        h = hpy()
+        logging.info('Memory consumption in bytes: {}'.format(h.heap().size))
         data = data.to(device)
 
         optimizer.zero_grad() # prevent gradient from accumulating
@@ -94,6 +96,12 @@ if __name__ == "__main__":
     test_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10('../data', train=False, transform=transform),
         batch_size=args.batch_size, shuffle=True, **kwargs)
+
+    logging.basicConfig(filename='memory.log',
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        level=logging.INFO,
+        datefmt='%Y-%m-%d %H:%M:%S')
+    logging.info('Starting')
 
     model = ReVAE().to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
