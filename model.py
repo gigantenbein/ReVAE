@@ -6,7 +6,7 @@ import revtorch as rv
 
 
 class ReVAE(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, n_layers_enc=1, n_layers_dec=1, latent_dim=10):
+    def __init__(self, in_channels=1, out_channels=1, n_layers_enc=1, n_layers_dec=10, latent_dim=10):
         super(ReVAE, self).__init__()
 
         self.fc1 = nn.Linear(3072, 400)
@@ -34,8 +34,8 @@ class ReVAE(nn.Module):
         self.conv3 = nn.ConvTranspose2d(32, 32, kernel_size=3, stride=(2, 2))
         self.conv4 = nn.ConvTranspose2d(32, 32, kernel_size=3, stride=(2, 2), output_padding=1)
 
-        f_func_dec = nn.Sequential(nn.ConvTranspose2d(16, 16, 3, padding=1), nn.ReLU(), nn.ConvTranspose2d(16, 16, 3, padding=1))
-        g_func_dec = nn.Sequential(nn.ConvTranspose2d(16, 16, 3, padding=1), nn.ReLU(), nn.ConvTranspose2d(16, 16, 3, padding=1))
+        f_func_dec = nn.Sequential(nn.Conv2d(16, 16, 3, padding=1), nn.ReLU(), nn.Conv2d(16, 16, 3, padding=1))
+        g_func_dec = nn.Sequential(nn.Conv2d(16, 16, 3, padding=1), nn.ReLU(), nn.Conv2d(16, 16, 3, padding=1))
 
         blocks_dec = [rv.ReversibleBlock(f_func_enc, g_func_enc) for i in range(n_layers_dec)]
 

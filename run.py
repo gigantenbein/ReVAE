@@ -96,7 +96,7 @@ if __name__ == "__main__":
         batch_size=args.batch_size, shuffle=True, **kwargs)
 
     model = ReVAE().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-2)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     for epoch in range(1, args.epochs + 1):
         train(epoch)
