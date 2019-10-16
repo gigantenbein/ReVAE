@@ -90,7 +90,6 @@ def test(epoch):
     print('====> Test set loss: {:.4f}'.format(test_loss))
 
 
-
 if __name__ == "__main__":
     parser, device, args = create_parser()
 
@@ -98,13 +97,15 @@ if __name__ == "__main__":
         [transforms.ToTensor()])
     kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 
+    cifar_dataset = datasets.CIFAR10('./data', train=True, download=True,
+                         transform=transform)
+
     train_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR10('../data', train=True, download=True,
-                         transform=transform),
+        cifar_dataset,
         batch_size=args.batch_size, shuffle=True, **kwargs)
 
     test_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR10('../data', train=False, transform=transform),
+        cifar_dataset,
         batch_size=args.batch_size, shuffle=True, **kwargs)
 
     logging.basicConfig(filename='memory.log',
@@ -117,7 +118,7 @@ if __name__ == "__main__":
     timestring = "_{}_{}_{}_{}_".format(timestamp.tm_year, timestamp.tm_mon, timestamp.tm_mday, timestamp.tm_hour)
 
     model = ReVAE().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     for epoch in range(1, args.epochs + 1):
         train(epoch)

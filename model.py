@@ -6,7 +6,7 @@ import revtorch as rv
 
 
 class ReVAE(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, n_layers_enc=1, n_layers_dec=1, latent_dim=10):
+    def __init__(self, in_channels=1, out_channels=1, n_layers_enc=4, n_layers_dec=4, latent_dim=10):
         super(ReVAE, self).__init__()
 
         # =============================
@@ -14,6 +14,10 @@ class ReVAE(nn.Module):
         self.fc3 = nn.Linear(latent_dim, 400)
         self.fc4 = nn.Linear(400, 3072)
         # =============================
+
+        self.bn32 = nn.BatchNorm2d(32)
+        self.bn3 = nn.BatchNorm2d(3)
+        self.bn16 = nn.BatchNorm2d(16)
 
         # Encoder
         self.conv1 = nn.Conv2d(3, 32, 3)  # go to 32 channels such that reversible blocks can split it.
@@ -46,19 +50,19 @@ class ReVAE(nn.Module):
         self.last = nn.Conv2d(32, 3, 3, padding=1)
 
     def encode(self, x):
-        h1 = F.relu(self.conv1(x))
+        h1 = F.relu(self.bn32(self.conv1(x)))
 
         before_size = h1.size()
-        h1 = F.relu(self.sequence_enc(h1))
+        h1 = F.relu(self.bn32(self.sequence_enc(h1)))
         after_size = h1.size()
 
         assert before_size == after_size, 'Size {} is not equal to {}'.format(before_size, after_size)
-        h1 = F.relu(self.conv2(h1))
+        h1 = F.relu(self.bn3(self.conv2(h1)))
 
         h1 = h1.view(-1, 2700)
         return self.fc21(h1), self.fc22(h1)
 
-    def encode_(self, x):
+    def _encode(self, x):
         h1 = F.relu(self.fc1(x))
         return self.fc21(h1), self.fc22(h1)
 
@@ -71,8 +75,8 @@ class ReVAE(nn.Module):
         h3 = F.relu(self.lin3(z))
         h3 = F.relu(self.lin4(h3))
         h3 = h3.view(-1, 32, 8, 8)
-        h3 = F.relu(self.conv3(h3))
-        h3 = F.relu(self.conv4(h3))
+        h3 = F.relu(self.bn16(self.conv3(h3)))
+        h3 = F.relu(self.bn16(self.conv4(h3)))
         h3 = self.conv5(h3)
         #h3 = F.relu(self.sequence_dec(h3))
         return torch.sigmoid(h3)
@@ -83,7 +87,7 @@ class ReVAE(nn.Module):
 
     def forward(self, x):
         mu, logvar = self.encode(x)
-        # mu, logvar = self.encode(x.view(-1, 3072))
+        #mu, logvar = self.encode(x.view(-1, 3072))
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
@@ -92,6 +96,8 @@ class ReVAE(nn.Module):
 # WATCH OUT: probably dimension makes a difference
 def loss_function(recon_x, x, mu, logvar):
     assert mu.size() == logvar.size()
+    #BCE = F.binary_cross_entropy(recon_x, x.view(-1, 3072), reduction='sum')
+
     BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
     loss = nn.MSELoss(reduction='mean')
 
