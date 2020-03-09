@@ -1,9 +1,75 @@
 import torch
 import torch.nn as nn
-import torchvision
 from torch.nn import functional as F
 import revtorch as rv
 
+
+class Sequence(nn.Module):
+    def __init__(self, n_layers):
+        super(Sequence, self).__init__()
+        # f and g must both be a nn.Module whos output has the same shape as its input
+        f_func_enc = nn.Sequential(nn.Conv2d(128, 128, 3, padding=1), nn.ReLU(), nn.Conv2d(128, 128, 3, padding=1))
+        g_func_enc = nn.Sequential(nn.Conv2d(128, 128, 3, padding=1), nn.ReLU(), nn.Conv2d(128, 128, 3, padding=1))
+
+        blocks_enc = [rv.ReversibleBlock(f_func_enc, g_func_enc) for i in range(n_layers)]
+        self.sequence_enc = rv.ReversibleSequence(nn.ModuleList(blocks_enc))
+
+    def forward(self, x):
+        return self.sequence_enc(x)
+
+
+class ConvolutionalVAE(nn.Module):
+    def __init__(self, n_layers_enc=1, n_layers_dec=1):
+        super(ConvolutionalVAE, self).__init__()
+
+        self.encoder_layers = nn.Sequential(
+            nn.Conv2d(3, 128, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            #nn.MaxPool2d(kernel_size=2),
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            Sequence(3),
+            #nn.MaxPool2d(kernel_size=2),
+            nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            #nn.MaxPool2d(kernel_size=2),
+            nn.Conv2d(512, 1024, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            #nn.MaxPool2d(kernel_size=2)
+        )
+        self.mu_fc = nn.Linear(4096, 128)
+        self.logvar_fc = nn.Linear(4096, 128)
+
+        self.latent_fc = nn.Linear(128, 8 * 8 * 1024)
+        self.decoder_layers = nn.Sequential(
+            nn.ReLU(),
+            nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1, output_padding=1),
+            nn.ReLU(),
+            Sequence(3),
+            nn.ConvTranspose2d(256, 3, kernel_size=4, stride=1, padding=2),
+        )
+
+    def encode(self, x):
+        h1 = self.encoder_layers(x)
+        h1 = h1.view(-1, 4096)
+        return self.mu_fc(h1), self.logvar_fc(h1)
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5*logvar)
+        eps = torch.randn_like(std)
+        return mu + eps*std
+
+    def decode(self, z):
+        h3 = self.latent_fc(z)
+        h3 = self.decoder_layers(h3.view(-1, 1024, 8, 8))
+        return torch.sigmoid(h3)
+
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        return self.decode(z).view(-1, 3072), mu, logvar
 
 class ReVAE(nn.Module):
     def __init__(self, in_channels=1, out_channels=1, n_layers_enc=4, n_layers_dec=4, latent_dim=10):
@@ -78,7 +144,6 @@ class ReVAE(nn.Module):
         h3 = F.relu(self.bn16(self.conv3(h3)))
         h3 = F.relu(self.bn16(self.conv4(h3)))
         h3 = self.conv5(h3)
-        #h3 = F.relu(self.sequence_dec(h3))
         return torch.sigmoid(h3)
 
     def _decode(self, z):
@@ -87,21 +152,14 @@ class ReVAE(nn.Module):
 
     def forward(self, x):
         mu, logvar = self.encode(x)
-        #mu, logvar = self.encode(x.view(-1, 3072))
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
 
 # Reconstruction + KL divergence losses summed over all elements and batch
-# WATCH OUT: probably dimension makes a difference
 def loss_function(recon_x, x, mu, logvar):
     assert mu.size() == logvar.size()
-    #BCE = F.binary_cross_entropy(recon_x, x.view(-1, 3072), reduction='sum')
-
-    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
-    loss = nn.MSELoss(reduction='mean')
-
-    #BCE = loss(recon_x, x.view(-1, 3072))
+    BCE = F.binary_cross_entropy(recon_x, x.view(-1, 3072), reduction='sum')
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014

@@ -10,7 +10,7 @@ from torchvision.utils import save_image
 import pytest
 from guppy import hpy
 
-from model import ReVAE, loss_function
+from model import ConvolutionalVAE, ReVAE, loss_function
 
 def create_parser():
     parser = argparse.ArgumentParser(description='VAE MNIST Example')
@@ -30,6 +30,7 @@ def create_parser():
     torch.manual_seed(args.seed)
 
     device = torch.device("cuda" if args.cuda else "cpu")
+    #device = torch.device("cuda")
     return parser, device, args
 
 
@@ -49,10 +50,6 @@ def train(epoch):
 
         train_loss += loss.item()
 
-        loss_ = nn.MSELoss(reduction='mean')
-
-        loss_ = loss_(recon_batch.view(-1, 3072), data.view(-1, 3072))
-
         optimizer.step()
 
         if batch_idx % args.log_interval == 0:
@@ -61,7 +58,7 @@ def train(epoch):
                 100. * batch_idx / len(train_loader),
                 loss_))
             with torch.no_grad():
-                sample_ = torch.randn(64, 10).to(device)
+                sample_ = torch.randn(64, 128).to(device)
                 sample_ = model.decode(sample_).cpu()
                 save_image(sample_.view(64, 3, 32, 32),
                            'intermediates/sample_' + timestring + str(batch_idx) + '.png')
@@ -117,14 +114,14 @@ if __name__ == "__main__":
     timestamp = time.localtime()
     timestring = "_{}_{}_{}_{}_".format(timestamp.tm_year, timestamp.tm_mon, timestamp.tm_mday, timestamp.tm_hour)
 
-    model = ReVAE().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    model = ConvolutionalVAE().to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
     for epoch in range(1, args.epochs + 1):
         train(epoch)
         test(epoch)
         with torch.no_grad():
-            sample = torch.randn(64, 10).to(device)
+            sample = torch.randn(64, 128).to(device)
             sample = model.decode(sample).cpu()
             save_image(sample.view(64, 3, 32, 32),
                        'results_cifar/sample_' + timestring + str(epoch) + '.png')
