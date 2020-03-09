@@ -8,6 +8,6 @@ with a slight increase in training time.
 
 Install PyTorch by following the instructions on pytorch.org. For the pip packages do
 
-'''pip install -r requirements.txt'''
+```pip install -r requirements.txt```
 
 in your project directory.
